@@ -4,9 +4,11 @@ import os
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 import asyncio
 import io
 import datetime
+import time
 
 # ======================================================
 # === YOUR SETTINGS - EDIT HERE ONLY ===
@@ -90,7 +92,7 @@ async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
 
 # ======================================================
-# === /SCRIPT - MODEL C PURE (KAYAK VIDEO) ===
+# === /SCRIPT - MODEL C PURE + FETCH BANDDEL ===
 # ======================================================
 
 def format_num(n):
@@ -139,6 +141,81 @@ def get_game_image(s):
         return g.get("imageUrl") or g.get("image") or ""
     return ""
 
+def extract_scripts(data):
+    # ScriptBlox kadang ganti bentuk JSON, handle semua bentuk
+    if not isinstance(data, dict):
+        return []
+    # Bentuk 1: result.scripts
+    r = data.get("result")
+    if isinstance(r, dict) and isinstance(r.get("scripts"), list):
+        return r["scripts"]
+    # Bentuk 2: result langsung list
+    if isinstance(r, list):
+        return r
+    # Bentuk 3: scripts langsung
+    if isinstance(data.get("scripts"), list):
+        return data["scripts"]
+    # Bentuk 4: data langsung list di result
+    if isinstance(data.get("result"), list):
+        return data["result"]
+    return []
+
+def fetch_from_url(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://scriptblox.com/",
+        "Origin": "https://scriptblox.com",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read().decode(errors="ignore")
+        return json.loads(raw)
+
+def search_scriptblox(query_text):
+    # Coba beberapa query + beberapa endpoint, biar ga gampang "busy"
+    tries = []
+    q = query_text.strip()
+    # Query utama + versi pendeknya
+    queries = [q]
+    # block fruit -> blox fruit, biar ketemu
+    low = q.lower()
+    if "block fruit" in low:
+        queries.append(low.replace("block fruit", "blox fruit"))
+    if "blox fruit" in low:
+        queries.append("blox")
+    # Buat 1-2 kata pertama aja sebagai fallback
+    words = q.split()
+    if len(words) > 1:
+        queries.append(words[0])
+
+    for qq in queries:
+        enc = urllib.parse.quote(qq)
+        urls = [
+            f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1",
+            f"https://scriptblox.com/api/script/search?q={enc}&mode=free",
+            f"https://scriptblox.com/api/script/search?q={enc}",
+        ]
+        for url in urls:
+            try:
+                data = fetch_from_url(url)
+                scripts = extract_scripts(data)
+                if scripts:
+                    print(f"SCRIPTBLOX OK query={qq} url={url} found={len(scripts)}")
+                    return scripts
+                else:
+                    print(f"SCRIPTBLOX EMPTY query={qq} url={url}")
+            except urllib.error.HTTPError as e:
+                print(f"SCRIPTBLOX HTTP {e.code} query={qq} url={url}")
+                # 429 = kena rate limit, tunggu bentar
+                if e.code == 429:
+                    time.sleep(2)
+                continue
+            except Exception as e:
+                print(f"SCRIPTBLOX ERR {e} query={qq} url={url}")
+                continue
+    return []
+
 def build_embed(scripts, idx, query):
     s = scripts[idx]
     title = s.get("title") or "No Title"
@@ -153,18 +230,13 @@ def build_embed(scripts, idx, query):
     code = get_script_code(s).strip()
     if not code:
         code = "-- No script code in API, open Game List for link"
-    # Potong code biar muat di embed, full-nya ada di Copy / Download
     display_code = code if len(code) <= 900 else code[:900] + "\n-- ... (pencet Copy Script buat full)"
-
     embed = discord.Embed(title=title, color=0x2b2d31)
-    # Header kayak di video: views | likes | verified | key | universal | umur
     embed.description = f"👁 {views}  |  👍 {likes}  |  ✅ {verified}  |  🔑 {key}  |  🌐 {universal}  |  📅 {created}  |  🔄 {updated}\n\n```lua\n{display_code}\n```"
     embed.set_footer(text=f"Page 1/1 | Script {idx+1}/{len(scripts)}  •  Search: {query}")
-    # Gambar: utamain image script, kalo ga ada pake image game
     img = s.get("image") or s.get("imageUrl") or get_game_image(s)
-    if img:
-        if img.startswith("http"):
-            embed.set_image(url=img)
+    if img and isinstance(img, str) and img.startswith("http"):
+        embed.set_image(url=img)
     return embed
 
 class ScriptView(discord.ui.View):
@@ -182,7 +254,6 @@ class ScriptView(discord.ui.View):
         embed = build_embed(self.scripts, self.idx, self.query)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    # --- ROW 0: Copy / Download / Options ---
     @discord.ui.button(label="Copy Script", style=discord.ButtonStyle.secondary, emoji="📋", row=0)
     async def copy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current()
@@ -190,7 +261,6 @@ class ScriptView(discord.ui.View):
         if not code:
             await interaction.response.send_message("Script code-nya kosong di API. Coba script lain.", ephemeral=True)
             return
-        # Kalo kepanjangan buat 1 pesan, kirim jadi file + potongan pertama
         if len(code) > 1900:
             f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
             await interaction.response.send_message(content=f"**{s.get('title','Script')}** - full code di file bawah, tinggal download & copy:", file=f, ephemeral=True)
@@ -218,7 +288,6 @@ class ScriptView(discord.ui.View):
             ephemeral=True
         )
 
-    # --- ROW 1: Pagination ---
     @discord.ui.button(emoji="◀", style=discord.ButtonStyle.secondary, row=1)
     async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.idx = (self.idx - 1) % len(self.scripts)
@@ -233,7 +302,6 @@ class ScriptView(discord.ui.View):
         self.idx = (self.idx + 1) % len(self.scripts)
         await self.update_msg(interaction)
 
-    # --- ROW 2: Game List doang, PURE ---
     @discord.ui.button(label="Game List", style=discord.ButtonStyle.success, emoji="✅", row=2)
     async def gamelist_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current()
@@ -246,20 +314,18 @@ class ScriptView(discord.ui.View):
 async def script_cmd(interaction: discord.Interaction, name: str):
     await interaction.response.defer()
     try:
-        query = urllib.parse.quote(name)
-        url = f"https://scriptblox.com/api/script/search?q={query}&mode=free"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15) as r:
-            data = json.loads(r.read().decode())
-        results = data.get("result", {}).get("scripts", [])[:10]
+        # Jalanin di thread biar ga nge-block bot, + biar ga timeout
+        results = await asyncio.to_thread(search_scriptblox, name)
+        results = results[:10]
         if not results:
-            await interaction.followup.send(f"No scripts found for **{name}**.")
+            await interaction.followup.send(f"No scripts found for **{name}**. Coba ketik nama lain, contoh: `/script blox fruit` / `/script blade ball`")
             return
         view = ScriptView(results, name, interaction.user.id)
         embed = build_embed(results, 0, name)
         await interaction.followup.send(embed=embed, view=view)
     except Exception as e:
-        print(e); await interaction.followup.send("ScriptBlox is busy, try again!")
+        print(f"SCRIPT CMD ERR: {e}")
+        await interaction.followup.send("ScriptBlox lagi down / kena limit, tunggu 30 detik terus coba lagi!")
 
 # --- KIRIM PESAN SENDIRI LEWAT DM - TANPA TAG, TANPA / ---
 @bot.event
