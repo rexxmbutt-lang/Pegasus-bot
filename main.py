@@ -72,7 +72,7 @@ async def join_voice():
     except Exception as e:
         print(f"DEBUG JOIN ERROR: {e}")
         
-tasks.loop(seconds=60)
+@tasks.loop(seconds=60)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
         await join_voice()
