@@ -7,6 +7,7 @@ import urllib.parse
 import asyncio
 import io
 import datetime
+import time
 
 OWNER_ID = 1437432905734291618
 VOICE_CHANNEL_ID = 1570742871374569562
@@ -20,7 +21,7 @@ PRESET_MESSAGES = {
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n📝 ```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: list players on server\n❌ Removed: Old Fly and speed jump\n🔧 Fixed: Crash on load and slider```",
+    "changelog_universal": "@everyone\n📝 ```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: list players server\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load and slider script```",
     "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
@@ -38,43 +39,49 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- VOICE: FIX 4006 / 522 - PUTUSIN DULU BARU JOIN ---
-async def join_voice():
-    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
-    try:
-        if VOICE_CHANNEL_ID == 0: return
-        channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        # Kalo ada voice client lama yang nyangkut / udah putus, putusin paksa dulu
-        for vc in list(bot.voice_clients):
-            try:
-                if not vc.is_connected():
-                    await vc.disconnect(force=True)
-                    print("DEBUG PUTUSIN VOICE LAMA YANG NYANGKUT", flush=True)
-            except: pass
-        if bot.voice_clients and bot.voice_clients[0].is_connected():
-            print("DEBUG UDAH CONNECT BENERAN, SKIP", flush=True)
-            return
-        # Kalo masih ada sisa, putusin semua biar bersih
-        for vc in list(bot.voice_clients):
-            try: await vc.disconnect(force=True)
-            except: pass
-        await channel.connect(self_deaf=True, self_mute=True, timeout=20)
-        print("DEBUG BERHASIL CONNECT!", flush=True)
-    except Exception as e:
-        print(f"DEBUG JOIN ERROR: {e}", flush=True)
-        # Bersihin sisa biar next loop bisa coba lagi
-        for vc in list(bot.voice_clients):
-            try: await vc.disconnect(force=True)
-            except: pass
+# --- VOICE: PELAN, PAKE LOCK, GA SPAM ---
+voice_lock = asyncio.Lock()
+last_voice_try = 0
 
-@tasks.loop(seconds=30)
+async def join_voice():
+    global last_voice_try
+    # Jangan join kalo baru aja nyoba < 60 detik lalu, biar ga rate-limit
+    now = time.time()
+    if now - last_voice_try < 60:
+        print(f"DEBUG VOICE: BARU NYOBA {int(now-last_voice_try)} DETIK LALU, SKIP BIAR GA RATE-LIMIT", flush=True)
+        return
+    # Kunci, biar ga ada 2 join barengan
+    if voice_lock.locked():
+        print("DEBUG VOICE: LAGI JOIN, SKIP YANG DOBEL", flush=True)
+        return
+    async with voice_lock:
+        last_voice_try = time.time()
+        print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
+        try:
+            if VOICE_CHANNEL_ID == 0: return
+            channel = bot.get_channel(VOICE_CHANNEL_ID)
+            if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+            # Kalo udah connect beneran, jangan diapa-apain
+            for vc in bot.voice_clients:
+                if vc.is_connected():
+                    print("DEBUG UDAH CONNECT BENERAN, SKIP", flush=True)
+                    return
+            # Bersihin sisa yang nyangkut, 1x aja
+            for vc in list(bot.voice_clients):
+                try: await vc.disconnect(force=True)
+                except: pass
+            await channel.connect(self_deaf=True, self_mute=True, timeout=20)
+            print("DEBUG BERHASIL CONNECT!", flush=True)
+        except Exception as e:
+            print(f"DEBUG JOIN ERROR: {type(e).__name__}: {e} | repr={repr(e)}", flush=True)
+
+# Loop 5 menit, bukan 30 detik. Ini yang bikin rate-limit tadi.
+@tasks.loop(minutes=5)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID != 0:
-        # Cek beneran connected atau cuma nyangkut
         connected = any(vc.is_connected() for vc in bot.voice_clients)
         if not connected:
-            print("DEBUG VOICE PUTUS / KOSONG, JOIN LAGI...", flush=True)
+            print("DEBUG VOICE KOSONG, COBA JOIN (5-MENIT LOOP)...", flush=True)
             await join_voice()
 
 @bot.event
@@ -88,32 +95,25 @@ async def on_ready():
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel and not after.channel:
-        print("DEBUG PEGASUS KE-KICK, JOIN LAGI...", flush=True)
-        await asyncio.sleep(2); await join_voice()
+        print("DEBUG PEGASUS KE-KICK, TUNGGU 60 DETIK BARU JOIN LAGI...", flush=True)
+        await asyncio.sleep(60); await join_voice()
 
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
 
-# --- HELPER: GAMBAR DARI ROBLOX ---
 def get_roblox_icon(game_dict):
-    # ScriptBlox kadang nyimpen gameId / placeId / universeId
-    # Kita coba ambil icon Roblox-nya dari situ
     if not isinstance(game_dict, dict): return ""
     gid = game_dict.get("gameId") or game_dict.get("placeId") or game_dict.get("universeId") or game_dict.get("id")
     if not gid: return ""
     try:
-        # Roblox Thumbnail API: universeId -> icon
-        # Kalo yang dikasih placeId, Roblox biasanya tetep bisa, kita coba langsung
         url = f"https://thumbnails.roblox.com/v1/games/icons?universeIds={gid}&size=512x512&format=Png&isCircular=false"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
             d = json.loads(r.read().decode())
             items = d.get("data", [])
-            if items and items[0].get("imageUrl"):
-                return items[0]["imageUrl"]
-    except Exception as e:
-        print(f"ROBLOX ICON ERR {e}", flush=True)
+            if items and items[0].get("imageUrl"): return items[0]["imageUrl"]
+    except Exception as e: print(f"ROBLOX ICON ERR {e}", flush=True)
     return ""
 
 def format_num(n):
@@ -146,20 +146,15 @@ def get_game_name(s):
     return str(g) if g else "Universal"
 def get_game_image(s):
     g = s.get("game") or {}
-    # 1. Coba image dari ScriptBlox dulu
     if isinstance(g, dict):
         for k in ["imageUrl", "image", "icon", "thumbnail"]:
             v = g.get(k)
-            if v and isinstance(v, str) and v.startswith("http"):
-                return v
-            if v and isinstance(v, str) and v.startswith("/"):
-                return "https://scriptblox.com" + v
-    # 2. Coba image dari script-nya
+            if v and isinstance(v, str) and v.startswith("http"): return v
+            if v and isinstance(v, str) and v.startswith("/"): return "https://scriptblox.com" + v
     for k in ["image", "imageUrl", "thumbnail"]:
         v = s.get(k)
         if v and isinstance(v, str) and v.startswith("http"): return v
         if v and isinstance(v, str) and v.startswith("/"): return "https://scriptblox.com" + v
-    # 3. Kalo ga ada, ambil dari Roblox
     return get_roblox_icon(g)
 
 def extract_scripts(data):
@@ -203,10 +198,8 @@ def search_scriptblox(query_text):
 def build_embed(scripts, idx, query):
     s = scripts[idx]
     title = s.get("title") or "No Title"
-    # Kasih prefix [KEYLESS] / [KEY] kayak REXX, biar keliatan pro
     prefix = "[KEYLESS]" if not s.get("key") else "[KEY]"
-    if not title.startswith("["):
-        title = f"{prefix} {title}"
+    if not title.startswith("["): title = f"{prefix} {title}"
     game = get_game_name(s)
     views = format_num(s.get("views") or s.get("viewCount") or 0)
     likes = format_num(s.get("likeCount") or s.get("likes") or 0)
@@ -217,12 +210,10 @@ def build_embed(scripts, idx, query):
     if not code: code = "-- No script code in API, open Game List for link"
     display_code = code if len(code) <= 900 else code[:900] + "\n-- ... (pencet Copy Script buat full)"
     embed = discord.Embed(title=title, color=0x2b2d31)
-    # TANPA EMOJI, BERSIH KAYAK REXX
     embed.description = f"{views} Views  |  {likes} Likes  |  {verified}  |  {key}  |  {game}  |  {created}\n\n```lua\n{display_code}\n```"
     embed.set_footer(text=f"Page 1/1 | Script {idx+1}/{len(scripts)}  •  Search: {query}")
     img = get_game_image(s)
-    if img:
-        embed.set_image(url=img)
+    if img: embed.set_image(url=img)
     return embed
 
 class ScriptView(discord.ui.View):
@@ -233,7 +224,6 @@ class ScriptView(discord.ui.View):
     async def update_msg(self, interaction):
         embed = build_embed(self.scripts, self.idx, self.query)
         await interaction.response.edit_message(embed=embed, view=self)
-    # TANPA EMOJI DI TOMBOL, BERSIH
     @discord.ui.button(label="Copy Script", style=discord.ButtonStyle.secondary, row=0)
     async def copy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current(); code = get_script_code(s).strip()
@@ -242,8 +232,7 @@ class ScriptView(discord.ui.View):
         if len(code) > 1900:
             f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
             await interaction.response.send_message(content=f"**{s.get('title','Script')}** - full code di file bawah:", file=f, ephemeral=True)
-        else:
-            await interaction.response.send_message(content=f"```lua\n{code}\n```", ephemeral=True)
+        else: await interaction.response.send_message(content=f"```lua\n{code}\n```", ephemeral=True)
     @discord.ui.button(label="Download Script", style=discord.ButtonStyle.secondary, row=0)
     async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current(); code = get_script_code(s).strip() or "-- no code"
