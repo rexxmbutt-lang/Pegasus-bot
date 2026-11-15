@@ -27,4 +27,8 @@ async def halo(interaction: discord.Interaction):
 
 @bot.event
 async def on_member_join(member):
-    channel = discord
+    channel = discord.utils.get(member.guild.text_channels, name="general")
+    if channel:
+        await channel.send(f"Selamat datang {member.mention}! 🔥")
+
+bot.run(os.getenv("DISCORD_TOKEN"))
