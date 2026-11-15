@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import os
 import json
 import urllib.request
@@ -9,19 +9,18 @@ import io
 import datetime
 
 OWNER_ID = 1437432905734291618
-VOICE_CHANNEL_ID = 1570742871374569562
 UPDATE_CHANNEL_ID = 1570412727019638876
 
 PRESET_MESSAGES = {
-    "update_VD": "@everyone\n🔥 **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
-    "update_universal": "@everyone\n🔥 **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
+    "update_VD": "@everyone\n **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
+    "update_universal": "@everyone\n **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
     "maintenance": "@everyone\n```VD SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "update_opah": "@everyone\n🔥 **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
+    "update_opah": "@everyone\n **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n📝 **CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New UI\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load",
-    "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
+    "changelog_VD": "@everyone\n **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
+    "changelog_universal": "@everyone\n **```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New flu\n❌ Removed: Old Fly\n🔧 Fixed: slider stuck & Crash on load```**",
+    "changelog_opah": "@everyone\n **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
 HELP_MESSAGE = """**PEGASUS - HOW TO USE**
@@ -38,33 +37,12 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- VOICE: JOIN 1X DOANG, ABIS ITU DIEMIN, BIAR DISCORD.PY YANG RECONNECT SENDIRI ---
-# JANGAN ada loop, JANGAN ada disconnect paksa, JANGAN ada on_voice_state_update yang join lagi
-# Itu yang bikin tabrakan + ke-kick 4006 dari tadi
-async def join_voice_once():
-    try:
-        if VOICE_CHANNEL_ID == 0: return
-        if bot.voice_clients:
-            print("DEBUG VOICE UDAH ADA, GA JOIN LAGI", flush=True)
-            return
-        channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        print(f"DEBUG JOIN SEKALI KE {channel}", flush=True)
-        # reconnect=True = biarin discord.py yang retry sendiri kalo putus, kita ga ikut campur
-        await channel.connect(self_deaf=True, self_mute=True, timeout=30, reconnect=True)
-        print("DEBUG BERHASIL CONNECT!", flush=True)
-    except Exception as e:
-        print(f"DEBUG JOIN ERROR: {type(e).__name__}: {e}", flush=True)
-
 @bot.event
 async def on_ready():
     print(f"LOGGED IN AS {bot.user}", flush=True)
     try: await bot.tree.sync()
     except Exception as e: print(e, flush=True)
-    await join_voice_once()
-    # GA ADA keep_voice_alive LAGI, itu biangnya
-
-# GA ADA on_voice_state_update LAGI, itu juga biangnya tabrakan
+    print("VOICE DIMATIIN - RAILWAY GA SUPPORT UDP, BIAR GA SPAM 4006", flush=True)
 
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
@@ -81,7 +59,7 @@ def get_roblox_icon(game_dict):
             d = json.loads(r.read().decode())
             items = d.get("data", [])
             if items and items[0].get("imageUrl"): return items[0]["imageUrl"]
-    except Exception as e: print(f"ROBLOX ICON ERR {e}", flush=True)
+    except: return ""
     return ""
 
 def format_num(n):
@@ -158,9 +136,7 @@ def search_scriptblox(query_text):
                 data = fetch_json(url)
                 scripts = extract_scripts(data)
                 if scripts: return scripts
-            except Exception as e:
-                print(f"SCRIPTBLOX ERR {e}", flush=True)
-                continue
+            except: continue
     return []
 
 def build_embed(scripts, idx, query):
