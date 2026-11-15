@@ -54,14 +54,25 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- VOICE: NYANGKUT SELAMANYA ---
 async def join_voice():
+    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
     try:
-        if VOICE_CHANNEL_ID == 0: return
+        if VOICE_CHANNEL_ID == 0:
+            print("DEBUG ID MASIH 0!")
+            return
         channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel or bot.voice_clients: return
+        if not channel:
+            print("DEBUG CHANNEL KETEMU NONE, COBA FETCH...")
+            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+        print(f"DEBUG CHANNEL={channel} TYPE={type(channel)}")
+        if bot.voice_clients:
+            print("DEBUG UDAH CONNECT, SKIP")
+            return
         await channel.connect(self_deaf=True, self_mute=True)
-    except: pass
-
-@tasks.loop(seconds=60)
+        print("DEBUG BERHASIL CONNECT!")
+    except Exception as e:
+        print(f"DEBUG JOIN ERROR: {e}")
+        
+tasks.loop(seconds=60)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
         await join_voice()
