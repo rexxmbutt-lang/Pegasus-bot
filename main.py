@@ -7,21 +7,20 @@ import urllib.parse
 import asyncio
 import io
 import datetime
-import time
 
 OWNER_ID = 1437432905734291618
 VOICE_CHANNEL_ID = 1570742871374569562
 UPDATE_CHANNEL_ID = 1570412727019638876
 
 PRESET_MESSAGES = {
-    "update_VD": "@everyone\n **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
-    "update_universal": "@everyone\n **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
+    "update_VD": "@everyone\n🔥 **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
+    "update_universal": "@everyone\n🔥 **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
     "maintenance": "@everyone\n```VD SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "update_opah": "@everyone\n **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
+    "update_opah": "@everyone\n🔥 **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n📝 ```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: list players server\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load and slider script```",
+    "changelog_universal": "@everyone\n📝 **CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New UI\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load",
     "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
@@ -39,64 +38,33 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- VOICE: PELAN, PAKE LOCK, GA SPAM ---
-voice_lock = asyncio.Lock()
-last_voice_try = 0
-
-async def join_voice():
-    global last_voice_try
-    # Jangan join kalo baru aja nyoba < 60 detik lalu, biar ga rate-limit
-    now = time.time()
-    if now - last_voice_try < 60:
-        print(f"DEBUG VOICE: BARU NYOBA {int(now-last_voice_try)} DETIK LALU, SKIP BIAR GA RATE-LIMIT", flush=True)
-        return
-    # Kunci, biar ga ada 2 join barengan
-    if voice_lock.locked():
-        print("DEBUG VOICE: LAGI JOIN, SKIP YANG DOBEL", flush=True)
-        return
-    async with voice_lock:
-        last_voice_try = time.time()
-        print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
-        try:
-            if VOICE_CHANNEL_ID == 0: return
-            channel = bot.get_channel(VOICE_CHANNEL_ID)
-            if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-            # Kalo udah connect beneran, jangan diapa-apain
-            for vc in bot.voice_clients:
-                if vc.is_connected():
-                    print("DEBUG UDAH CONNECT BENERAN, SKIP", flush=True)
-                    return
-            # Bersihin sisa yang nyangkut, 1x aja
-            for vc in list(bot.voice_clients):
-                try: await vc.disconnect(force=True)
-                except: pass
-            await channel.connect(self_deaf=True, self_mute=True, timeout=20)
-            print("DEBUG BERHASIL CONNECT!", flush=True)
-        except Exception as e:
-            print(f"DEBUG JOIN ERROR: {type(e).__name__}: {e} | repr={repr(e)}", flush=True)
-
-# Loop 5 menit, bukan 30 detik. Ini yang bikin rate-limit tadi.
-@tasks.loop(minutes=5)
-async def keep_voice_alive():
-    if VOICE_CHANNEL_ID != 0:
-        connected = any(vc.is_connected() for vc in bot.voice_clients)
-        if not connected:
-            print("DEBUG VOICE KOSONG, COBA JOIN (5-MENIT LOOP)...", flush=True)
-            await join_voice()
+# --- VOICE: JOIN 1X DOANG, ABIS ITU DIEMIN, BIAR DISCORD.PY YANG RECONNECT SENDIRI ---
+# JANGAN ada loop, JANGAN ada disconnect paksa, JANGAN ada on_voice_state_update yang join lagi
+# Itu yang bikin tabrakan + ke-kick 4006 dari tadi
+async def join_voice_once():
+    try:
+        if VOICE_CHANNEL_ID == 0: return
+        if bot.voice_clients:
+            print("DEBUG VOICE UDAH ADA, GA JOIN LAGI", flush=True)
+            return
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+        print(f"DEBUG JOIN SEKALI KE {channel}", flush=True)
+        # reconnect=True = biarin discord.py yang retry sendiri kalo putus, kita ga ikut campur
+        await channel.connect(self_deaf=True, self_mute=True, timeout=30, reconnect=True)
+        print("DEBUG BERHASIL CONNECT!", flush=True)
+    except Exception as e:
+        print(f"DEBUG JOIN ERROR: {type(e).__name__}: {e}", flush=True)
 
 @bot.event
 async def on_ready():
     print(f"LOGGED IN AS {bot.user}", flush=True)
     try: await bot.tree.sync()
     except Exception as e: print(e, flush=True)
-    await join_voice()
-    if not keep_voice_alive.is_running(): keep_voice_alive.start()
+    await join_voice_once()
+    # GA ADA keep_voice_alive LAGI, itu biangnya
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    if member.id == bot.user.id and before.channel and not after.channel:
-        print("DEBUG PEGASUS KE-KICK, TUNGGU 60 DETIK BARU JOIN LAGI...", flush=True)
-        await asyncio.sleep(60); await join_voice()
+# GA ADA on_voice_state_update LAGI, itu juga biangnya tabrakan
 
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
