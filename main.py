@@ -10,10 +10,6 @@ import io
 import datetime
 import time
 
-# ======================================================
-# === YOUR SETTINGS - EDIT HERE ONLY ===
-# ======================================================
-
 OWNER_ID = 1437432905734291618
 VOICE_CHANNEL_ID = 1570742871374569562
 UPDATE_CHANNEL_ID = 1570412727019638876
@@ -38,40 +34,24 @@ Example: `/script blox fruit`
 Example: `/script blade ball`
 """
 
-# ======================================================
-# === DO NOT EDIT BELOW ===
-# ======================================================
-
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- VOICE: NYANGKUT SELAMANYA ---
 async def join_voice():
-    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
     try:
-        if VOICE_CHANNEL_ID == 0:
-            print("DEBUG ID MASIH 0!")
-            return
+        if VOICE_CHANNEL_ID == 0: return
         channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel:
-            print("DEBUG CHANNEL KETEMU NONE, COBA FETCH...")
-            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        print(f"DEBUG CHANNEL={channel} TYPE={type(channel)}")
-        if bot.voice_clients:
-            print("DEBUG UDAH CONNECT, SKIP")
-            return
+        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+        if bot.voice_clients: return
         await channel.connect(self_deaf=True, self_mute=True)
-        print("DEBUG BERHASIL CONNECT!")
-    except Exception as e:
-        print(f"DEBUG JOIN ERROR: {e}")
+    except Exception as e: print(f"DEBUG JOIN ERROR: {e}")
 
 @tasks.loop(seconds=60)
 async def keep_voice_alive():
-    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
-        await join_voice()
+    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients: await join_voice()
 
 @bot.event
 async def on_ready():
@@ -86,134 +66,105 @@ async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel and not after.channel:
         await asyncio.sleep(2); await join_voice()
 
-#------ /HELP ---
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
 
 # ======================================================
-# === /SCRIPT - MODEL C PURE + FETCH BANDDEL ===
+# === /SCRIPT - MODEL C PURE + VIA PROXY (ANTI-BLOCK) ===
 # ======================================================
 
 def format_num(n):
     try:
         n = int(n)
-        if n >= 1000000:
-            return f"{n/1000000:.1f}M".replace(".0M", "M")
-        if n >= 1000:
-            return f"{n/1000:.1f}K".replace(".0K", "K")
+        if n >= 1000000: return f"{n/1000000:.1f}M".replace(".0M", "M")
+        if n >= 1000: return f"{n/1000:.1f}K".replace(".0K", "K")
         return str(n)
-    except:
-        return "0"
+    except: return "0"
 
 def time_ago(date_str):
-    if not date_str:
-        return "?"
+    if not date_str: return "?"
     try:
         dt = datetime.datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
         now = datetime.datetime.now(datetime.timezone.utc)
         delta = now - dt
-        if delta.days >= 365:
-            return f"{delta.days//365} year ago" if delta.days//365 == 1 else f"{delta.days//365} years ago"
-        if delta.days >= 30:
-            return f"{delta.days//30} month ago" if delta.days//30 == 1 else f"{delta.days//30} months ago"
-        if delta.days >= 1:
-            return f"{delta.days} day ago" if delta.days == 1 else f"{delta.days} days ago"
+        if delta.days >= 365: return f"{delta.days//365} year ago" if delta.days//365 == 1 else f"{delta.days//365} years ago"
+        if delta.days >= 30: return f"{delta.days//30} month ago" if delta.days//30 == 1 else f"{delta.days//30} months ago"
+        if delta.days >= 1: return f"{delta.days} day ago" if delta.days == 1 else f"{delta.days} days ago"
         if delta.seconds >= 3600:
             h = delta.seconds//3600
             return f"{h} hour ago" if h == 1 else f"{h} hours ago"
         return "just now"
-    except:
-        return "?"
+    except: return "?"
 
-def get_script_code(s):
-    return s.get("script") or s.get("code") or ""
-
+def get_script_code(s): return s.get("script") or s.get("code") or ""
 def get_game_name(s):
     g = s.get("game") or {}
-    if isinstance(g, dict):
-        return g.get("name") or "Universal"
+    if isinstance(g, dict): return g.get("name") or "Universal"
     return str(g) if g else "Universal"
-
 def get_game_image(s):
     g = s.get("game") or {}
-    if isinstance(g, dict):
-        return g.get("imageUrl") or g.get("image") or ""
+    if isinstance(g, dict): return g.get("imageUrl") or g.get("image") or ""
     return ""
 
 def extract_scripts(data):
-    # ScriptBlox kadang ganti bentuk JSON, handle semua bentuk
-    if not isinstance(data, dict):
-        return []
-    # Bentuk 1: result.scripts
+    if not isinstance(data, dict): return []
     r = data.get("result")
-    if isinstance(r, dict) and isinstance(r.get("scripts"), list):
-        return r["scripts"]
-    # Bentuk 2: result langsung list
-    if isinstance(r, list):
-        return r
-    # Bentuk 3: scripts langsung
-    if isinstance(data.get("scripts"), list):
-        return data["scripts"]
-    # Bentuk 4: data langsung list di result
-    if isinstance(data.get("result"), list):
-        return data["result"]
+    if isinstance(r, dict) and isinstance(r.get("scripts"), list): return r["scripts"]
+    if isinstance(r, list): return r
+    if isinstance(data.get("scripts"), list): return data["scripts"]
+    if isinstance(data.get("result"), list): return data["result"]
     return []
 
-def fetch_from_url(url):
+def fetch_json(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Referer": "https://scriptblox.com/",
-        "Origin": "https://scriptblox.com",
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=20) as resp:
         raw = resp.read().decode(errors="ignore")
         return json.loads(raw)
 
 def search_scriptblox(query_text):
-    # Coba beberapa query + beberapa endpoint, biar ga gampang "busy"
-    tries = []
     q = query_text.strip()
-    # Query utama + versi pendeknya
     queries = [q]
-    # block fruit -> blox fruit, biar ketemu
     low = q.lower()
-    if "block fruit" in low:
-        queries.append(low.replace("block fruit", "blox fruit"))
-    if "blox fruit" in low:
-        queries.append("blox")
-    # Buat 1-2 kata pertama aja sebagai fallback
+    if "block fruit" in low: queries.append(low.replace("block fruit", "blox fruit"))
+    if "blox fruit" in low: queries.append("blox")
     words = q.split()
-    if len(words) > 1:
-        queries.append(words[0])
+    if len(words) > 1: queries.append(words[0])
 
     for qq in queries:
         enc = urllib.parse.quote(qq)
-        urls = [
-            f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1",
-            f"https://scriptblox.com/api/script/search?q={enc}&mode=free",
-            f"https://scriptblox.com/api/script/search?q={enc}",
+        target = f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1"
+        # 1. Coba lewat proxy dulu - ini yang nembus Cloudflare
+        proxy_urls = [
+            f"https://api.allorigins.win/raw?url={urllib.parse.quote(target)}",
+            f"https://api.codetabs.com/v1/proxy?quest={urllib.parse.quote(target)}",
         ]
-        for url in urls:
+        for url in proxy_urls:
             try:
-                data = fetch_from_url(url)
+                data = fetch_json(url)
                 scripts = extract_scripts(data)
                 if scripts:
-                    print(f"SCRIPTBLOX OK query={qq} url={url} found={len(scripts)}")
+                    print(f"SCRIPTBLOX OK via proxy query={qq} found={len(scripts)}")
                     return scripts
-                else:
-                    print(f"SCRIPTBLOX EMPTY query={qq} url={url}")
-            except urllib.error.HTTPError as e:
-                print(f"SCRIPTBLOX HTTP {e.code} query={qq} url={url}")
-                # 429 = kena rate limit, tunggu bentar
-                if e.code == 429:
-                    time.sleep(2)
-                continue
+                print(f"SCRIPTBLOX EMPTY via proxy query={qq}")
             except Exception as e:
-                print(f"SCRIPTBLOX ERR {e} query={qq} url={url}")
+                print(f"SCRIPTBLOX PROXY ERR {e} query={qq} url={url[:60]}")
                 continue
+        # 2. Kalo proxy gagal, coba langsung (siapa tau IP-nya lagi ga di-block)
+        try:
+            data = fetch_json(target)
+            scripts = extract_scripts(data)
+            if scripts:
+                print(f"SCRIPTBLOX OK direct query={qq} found={len(scripts)}")
+                return scripts
+        except Exception as e:
+            print(f"SCRIPTBLOX DIRECT ERR {e} query={qq}")
+            continue
     return []
 
 def build_embed(scripts, idx, query):
@@ -228,85 +179,55 @@ def build_embed(scripts, idx, query):
     created = time_ago(s.get("createdAt") or s.get("created_at"))
     updated = time_ago(s.get("updatedAt") or s.get("updated_at"))
     code = get_script_code(s).strip()
-    if not code:
-        code = "-- No script code in API, open Game List for link"
+    if not code: code = "-- No script code in API, open Game List for link"
     display_code = code if len(code) <= 900 else code[:900] + "\n-- ... (pencet Copy Script buat full)"
     embed = discord.Embed(title=title, color=0x2b2d31)
     embed.description = f"👁 {views}  |  👍 {likes}  |  ✅ {verified}  |  🔑 {key}  |  🌐 {universal}  |  📅 {created}  |  🔄 {updated}\n\n```lua\n{display_code}\n```"
     embed.set_footer(text=f"Page 1/1 | Script {idx+1}/{len(scripts)}  •  Search: {query}")
     img = s.get("image") or s.get("imageUrl") or get_game_image(s)
-    if img and isinstance(img, str) and img.startswith("http"):
-        embed.set_image(url=img)
+    if img and isinstance(img, str) and img.startswith("http"): embed.set_image(url=img)
     return embed
 
 class ScriptView(discord.ui.View):
     def __init__(self, scripts, query, owner_id):
         super().__init__(timeout=300)
-        self.scripts = scripts
-        self.query = query
-        self.idx = 0
-        self.owner_id = owner_id
-
-    def current(self):
-        return self.scripts[self.idx]
-
+        self.scripts = scripts; self.query = query; self.idx = 0; self.owner_id = owner_id
+    def current(self): return self.scripts[self.idx]
     async def update_msg(self, interaction):
         embed = build_embed(self.scripts, self.idx, self.query)
         await interaction.response.edit_message(embed=embed, view=self)
-
     @discord.ui.button(label="Copy Script", style=discord.ButtonStyle.secondary, emoji="📋", row=0)
     async def copy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        s = self.current()
-        code = get_script_code(s).strip()
+        s = self.current(); code = get_script_code(s).strip()
         if not code:
-            await interaction.response.send_message("Script code-nya kosong di API. Coba script lain.", ephemeral=True)
-            return
+            await interaction.response.send_message("Script code-nya kosong di API. Coba script lain.", ephemeral=True); return
         if len(code) > 1900:
             f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
-            await interaction.response.send_message(content=f"**{s.get('title','Script')}** - full code di file bawah, tinggal download & copy:", file=f, ephemeral=True)
+            await interaction.response.send_message(content=f"**{s.get('title','Script')}** - full code di file bawah:", file=f, ephemeral=True)
         else:
             await interaction.response.send_message(content=f"```lua\n{code}\n```", ephemeral=True)
-
     @discord.ui.button(label="Download Script", style=discord.ButtonStyle.secondary, emoji="⬇️", row=0)
     async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        s = self.current()
-        code = get_script_code(s).strip() or "-- no code"
+        s = self.current(); code = get_script_code(s).strip() or "-- no code"
         f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
         await interaction.response.send_message(content=f"Download: **{s.get('title','Script')}**", file=f, ephemeral=True)
-
     @discord.ui.button(label="Options", style=discord.ButtonStyle.secondary, emoji="≡", row=0)
     async def options_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current()
         desc = s.get("description") or s.get("features") or "No description."
-        if len(desc) > 1500:
-            desc = desc[:1500] + "..."
-        await interaction.response.send_message(
-            f"**{s.get('title','Script')}**\n"
-            f"Game: **{get_game_name(s)}**\n"
-            f"Verified: {s.get('verified')} | Key: {s.get('key')} | Universal: {s.get('isUniversal')}\n"
-            f"Views: {format_num(s.get('views') or 0)} | Likes: {format_num(s.get('likeCount') or 0)}\n\n{desc}",
-            ephemeral=True
-        )
-
+        if len(desc) > 1500: desc = desc[:1500] + "..."
+        await interaction.response.send_message(f"**{s.get('title','Script')}**\nGame: **{get_game_name(s)}**\nVerified: {s.get('verified')} | Key: {s.get('key')} | Universal: {s.get('isUniversal')}\nViews: {format_num(s.get('views') or 0)} | Likes: {format_num(s.get('likeCount') or 0)}\n\n{desc}", ephemeral=True)
     @discord.ui.button(emoji="◀", style=discord.ButtonStyle.secondary, row=1)
     async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.idx = (self.idx - 1) % len(self.scripts)
-        await self.update_msg(interaction)
-
+        self.idx = (self.idx - 1) % len(self.scripts); await self.update_msg(interaction)
     @discord.ui.button(label="Page 1/1", style=discord.ButtonStyle.secondary, disabled=True, row=1)
-    async def page_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
-
+    async def page_btn(self, interaction: discord.Interaction, button: discord.ui.Button): pass
     @discord.ui.button(emoji="▶", style=discord.ButtonStyle.secondary, row=1)
     async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.idx = (self.idx + 1) % len(self.scripts)
-        await self.update_msg(interaction)
-
+        self.idx = (self.idx + 1) % len(self.scripts); await self.update_msg(interaction)
     @discord.ui.button(label="Game List", style=discord.ButtonStyle.success, emoji="✅", row=2)
     async def gamelist_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        s = self.current()
-        game = get_game_name(s)
-        slug = s.get("slug") or ""
+        s = self.current(); game = get_game_name(s); slug = s.get("slug") or ""
         link = f"https://scriptblox.com/script/{slug}" if slug else "https://scriptblox.com"
         await interaction.response.send_message(f"**Game:** {game}\n**Script:** {s.get('title','')}\n**Link:** {link}", ephemeral=True)
 
@@ -314,7 +235,6 @@ class ScriptView(discord.ui.View):
 async def script_cmd(interaction: discord.Interaction, name: str):
     await interaction.response.defer()
     try:
-        # Jalanin di thread biar ga nge-block bot, + biar ga timeout
         results = await asyncio.to_thread(search_scriptblox, name)
         results = results[:10]
         if not results:
@@ -327,7 +247,6 @@ async def script_cmd(interaction: discord.Interaction, name: str):
         print(f"SCRIPT CMD ERR: {e}")
         await interaction.followup.send("ScriptBlox lagi down / kena limit, tunggu 30 detik terus coba lagi!")
 
-# --- KIRIM PESAN SENDIRI LEWAT DM - TANPA TAG, TANPA / ---
 @bot.event
 async def on_message(message):
     await bot.process_commands(message)
@@ -340,26 +259,18 @@ async def on_message(message):
         if key in PRESET_MESSAGES and UPDATE_CHANNEL_ID != 0:
             ch = bot.get_channel(UPDATE_CHANNEL_ID)
             if ch:
-                await ch.send(PRESET_MESSAGES[key])
-                await message.reply(f"Sent preset `{key}` ✅")
-            else:
-                await message.reply("Update channel not found. Check UPDATE_CHANNEL_ID")
-        else:
-            await message.reply(f"Preset `{key}` not found. Available: {', '.join(PRESET_MESSAGES.keys())}")
+                await ch.send(PRESET_MESSAGES[key]); await message.reply(f"Sent preset `{key}` ✅")
+            else: await message.reply("Update channel not found. Check UPDATE_CHANNEL_ID")
+        else: await message.reply(f"Preset `{key}` not found. Available: {', '.join(PRESET_MESSAGES.keys())}")
         return
     if content.startswith("send "):
         try:
-            rest = content[5:].strip()
-            channel_part, msg_text = rest.split(" ", 1)
+            rest = content[5:].strip(); channel_part, msg_text = rest.split(" ", 1)
             channel_id = int(channel_part.replace("<#", "").replace(">", "").replace("#", ""))
             ch = bot.get_channel(channel_id)
-            if ch:
-                await ch.send(msg_text)
-                await message.reply(f"Sent to {ch.mention} ✅")
-            else:
-                await message.reply("Channel not found.")
-        except:
-            await message.reply("Format: send #channel your message")
+            if ch: await ch.send(msg_text); await message.reply(f"Sent to {ch.mention} ✅")
+            else: await message.reply("Channel not found.")
+        except: await message.reply("Format: send #channel your message")
         return
     await message.reply("DM Commands:\n`preset update_blox` - Send preset update\n`send #channel your message` - Send custom message")
 
