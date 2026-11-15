@@ -96,27 +96,15 @@ async def on_voice_state_update(member, before, after):
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
 
-# --- /SCRIPT - CARI DI SCRIPTBLOX ---
-@bot.tree.command(name="script", description="Search scripts on ScriptBlox")
-async def script_cmd(interaction: discord.Interaction, name: str):
-    await interaction.response.defer()
-    try:
-        query = urllib.parse.quote(name)
-        url = f"https://scriptblox.com/api/script/search?q={query}&mode=free"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode())
-        results = data.get("result", {}).get("scripts", [])[:5]
-        if not results:
-            await interaction.followup.send(f"No scripts found for **{name}**.")
-            return
-        msg = f"**🔎 Top results for `{name}` from ScriptBlox:**\n\n"
-        for s in results:
-            msg += f"**• {s.get('title','No Title')}** - {s.get('game',{}).get('name','Unknown')}\nhttps://scriptblox.com/script/{s.get('slug','')}\n\n"
-        await interaction.followup.send(msg)
-    except Exception as e:
-        print(e); await interaction.followup.send("ScriptBlox is busy, try again!")
-
+# --- /SCRIPT - CARI DI SCRIPT BLOX
+# baris 100-an
+description="Search scripts on ScriptBlox"
+async def ... (interaction: discord.Interaction, name: str):
+    ...
+    # yang ada ScriptBlox API-nya
+    # x.com/api/script/search?q={query}&mode=free
+    # yang di bawahnya ada followup.send(f"No scripts found...")
+    # sama yang ada for ... from ScriptBlox...
 # --- KIRIM PESAN SENDIRI LEWAT DM - TANPA TAG, TANPA / ---
 @bot.event
 async def on_message(message):
