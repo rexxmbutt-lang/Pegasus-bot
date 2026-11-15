@@ -63,9 +63,10 @@ async def join_voice():
         try:
             if VOICE_CHANNEL_ID == 0:
                 return
-             if bot.voice_clients:
+            if bot.voice_clients:
                 print("DEBUG UDAH CONNECT, SKIP")
                 return
+                
             channel = bot.get_channel(VOICE_CHANNEL_ID)
             if not channel:
                 channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
