@@ -15,15 +15,15 @@ VOICE_CHANNEL_ID = 1570742871374569562
 UPDATE_CHANNEL_ID = 1570412727019638876
 
 PRESET_MESSAGES = {
-    "update_VD": "@everyone\n🔥 **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
-    "update_universal": "@everyone\n🔥 **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
+    "update_VD": "@everyone\n **VIOLENCE DISTRICT SCRIPT UPDATE**\nNew version is now live!\nGet it with /script violence district",
+    "update_universal": "@everyone\n **UNIVERSAL SCRIPT UPDATE**\nNew version is now live!\nGet it with /script universal",
     "maintenance": "@everyone\n```VD SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "update_opah": "@everyone\n🔥 **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
+    "update_opah": "@everyone\n **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n📝 **CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New UI\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load",
-    "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
+    "changelog_VD": "@everyone\n **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
+    "changelog_universal": "@everyone\n **CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New UI\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load",
+    "changelog_opah": "@everyone\n **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
 HELP_MESSAGE = """**PEGASUS - HOW TO USE**
