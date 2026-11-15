@@ -54,10 +54,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- VOICE: NYANGKUT SELAMANYA ---
 async def join_voice():
-    if VOICE_CHANNEL_ID == 0: return
-    channel = bot.get_channel(VOICE_CHANNEL_ID)
-    if not channel or bot.voice_clients: return
-    await channel.connect(self_deaf=True, self_mute=True
+    try:
+        if VOICE_CHANNEL_ID == 0: return
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if not channel or bot.voice_clients: return
+        await channel.connect(self_deaf=True, self_mute=True)
     except: pass
 
 @tasks.loop(seconds=60)
@@ -71,15 +72,15 @@ async def on_ready():
     try: await bot.tree.sync()
     except Exception as e: print(e)
     await join_voice()
-    if not keep_voice_alive.is_running(): keep_voice_alive.s
-        
+    if not keep_voice_alive.is_running(): keep_voice_alive.start()
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     # Kalo Pegasus ke-kick dari voice, masuk lagi
-    if member.id == bot.user.id and before.channel and not a
-    await asyncio.sleep(2); await join_voice()
-
-# --- /HELP ---
+    if member.id == bot.user.id and before.channel and not after.channel:
+        await asyncio.sleep(2); await join_voice()
+        
+#------ /HELP ---
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
