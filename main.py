@@ -40,25 +40,18 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- VOICE: VERSI LAMA YANG NYANGKUT, BALIK LAGI ---
 async def join_voice():
     print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
     try:
-        if VOICE_CHANNEL_ID == 0:
-            print("DEBUG ID MASIH 0!", flush=True)
-            return
+        if VOICE_CHANNEL_ID == 0: return
         channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel:
-            print("DEBUG CHANNEL NONE, COBA FETCH...", flush=True)
-            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        print(f"DEBUG CHANNEL={channel}", flush=True)
+        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
         if bot.voice_clients:
             print("DEBUG UDAH CONNECT, SKIP", flush=True)
             return
         await channel.connect(self_deaf=True, self_mute=True)
         print("DEBUG BERHASIL CONNECT!", flush=True)
-    except Exception as e:
-        print(f"DEBUG JOIN ERROR: {e}", flush=True)
+    except Exception as e: print(f"DEBUG JOIN ERROR: {e}", flush=True)
 
 @tasks.loop(seconds=30)
 async def keep_voice_alive():
@@ -83,10 +76,6 @@ async def on_voice_state_update(member, before, after):
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
-
-# ======================================================
-# === /SCRIPT - MODEL C PURE + 3 LAPIS PROXY ===
-# ======================================================
 
 def format_num(n):
     try:
@@ -139,11 +128,8 @@ def fetch_json(url):
         "Referer": "https://scriptblox.com/",
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=25) as resp:
+    with urllib.request.urlopen(req, timeout=20) as resp:
         raw = resp.read().decode(errors="ignore")
-        # Jina kadang nambahin teks depan, cari { pertama
-        if raw.strip().startswith("{") == False and "{" in raw:
-            raw = raw[raw.find("{"):]
         return json.loads(raw)
 
 def search_scriptblox(query_text):
@@ -154,30 +140,20 @@ def search_scriptblox(query_text):
     if "blox fruit" in low: queries.append("blox")
     words = q.split()
     if len(words) > 1: queries.append(words[0])
-
     for qq in queries:
         enc = urllib.parse.quote(qq)
         target = f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1"
-        # Lapis 1: Jina - paling bandel nembus Cloudflare
-        # Lapis 2: AllOrigins
-        # Lapis 3: Langsung
-        tries = [
-            f"https://cc.bingj.com/cache.cgi?d=1&w=1&u={urllib.parse.quote(target)}",
-            f"https://r.jina.ai/{target}",
-            f"https://api.allorigins.win/raw?url={urllib.parse.quote(target)}",
-            target,
-        ]
-        for url in tries:
+        # Langsung dulu, ternyata ini yang tembus di Logs lu
+        for url in [target, f"https://api.allorigins.win/raw?url={urllib.parse.quote(target)}"]:
             try:
                 print(f"TRY FETCH {url[:70]} query={qq}", flush=True)
                 data = fetch_json(url)
                 scripts = extract_scripts(data)
                 if scripts:
-                    print(f"SCRIPTBLOX OK query={qq} found={len(scripts)} via {url[:40]}", flush=True)
+                    print(f"SCRIPTBLOX OK query={qq} found={len(scripts)}", flush=True)
                     return scripts
-                print(f"SCRIPTBLOX EMPTY query={qq} via {url[:40]}", flush=True)
             except Exception as e:
-                print(f"SCRIPTBLOX ERR {e} via {url[:50]}", flush=True)
+                print(f"SCRIPTBLOX ERR {e}", flush=True)
                 continue
     return []
 
@@ -225,7 +201,8 @@ class ScriptView(discord.ui.View):
         s = self.current(); code = get_script_code(s).strip() or "-- no code"
         f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
         await interaction.response.send_message(content=f"Download: **{s.get('title','Script')}**", file=f, ephemeral=True)
-    @discord.ui.button(label="Options", style=discord.ButtonStyle.secondary, emoji="≡", row=0)
+    # FIX: emoji ≡ -> ⚙️, yang lama bikin Discord nolak 400 Invalid emoji
+    @discord.ui.button(label="Options", style=discord.ButtonStyle.secondary, emoji="⚙️", row=0)
     async def options_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current()
         desc = s.get("description") or s.get("features") or "No description."
