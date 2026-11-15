@@ -55,24 +55,25 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- VOICE: NYANGKUT SELAMANYA ---
+_voice_lock = asyncio.Lock()
+
 async def join_voice():
-    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
-    try:
-        if VOICE_CHANNEL_ID == 0:
-            print("DEBUG ID MASIH 0!")
-            return
-        channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel:
-            print("DEBUG CHANNEL KETEMU NONE, COBA FETCH...")
-            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        print(f"DEBUG CHANNEL={channel} TYPE={type(channel)}")
-        if bot.voice_clients:
-            print("DEBUG UDAH CONNECT, SKIP")
-            return
-        await channel.connect(self_deaf=True, self_mute=True)
-        print("DEBUG BERHASIL CONNECT!")
-    except Exception as e:
-        print(f"DEBUG JOIN ERROR: {e}")
+    async with _voice_lock:
+        print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
+        try:
+            if VOICE_CHANNEL_ID == 0:
+                return
+            for vc in bot.voice_clients:
+                if vc.channel and vc.channel.id == VOICE_CHANNEL_ID and vc.is_connected():
+                    print("DEBUG UDAH CONNECT, SKIP")
+                    return
+            channel = bot.get_channel(VOICE_CHANNEL_ID)
+            if not channel:
+                channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+            await channel.connect(self_deaf=True, self_mute=True)
+            print("DEBUG BERHASIL CONNECT!")
+        except Exception as e:
+            print(f"DEBUG JOIN ERROR: {e}")
         
 @tasks.loop(seconds=60)
 async def keep_voice_alive():
