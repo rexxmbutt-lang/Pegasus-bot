@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 import json
 import urllib.request
@@ -9,6 +9,7 @@ import io
 import datetime
 
 OWNER_ID = 1437432905734291618
+VOICE_CHANNEL_ID = 1570742871374569562
 UPDATE_CHANNEL_ID = 1570412727019638876
 
 PRESET_MESSAGES = {
@@ -18,9 +19,9 @@ PRESET_MESSAGES = {
     "update_opah": "@everyone\n **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "changelog_VD": "@everyone\n **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n **```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New flu\n❌ Removed: Old Fly\n🔧 Fixed: slider stuck & Crash on load```**",
-    "changelog_opah": "@everyone\n **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
+    "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
+    "changelog_universal": "@everyone\n📝 **```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New fly\n❌ Removed: Old Fly\n🔧 Fixed: slider. pake lagi tu sc suki```**",
+    "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
 HELP_MESSAGE = """**PEGASUS - HOW TO USE**
@@ -37,12 +38,44 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# --- VOICE: NYANGKUT SELAMANYA ---
+async def join_voice():
+    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
+    try:
+        if VOICE_CHANNEL_ID == 0:
+            print("DEBUG ID MASIH 0!")
+            return
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if not channel:
+            print("DEBUG CHANNEL KETEMU NONE, COBA FETCH...")
+            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+        print(f"DEBUG CHANNEL={channel} TYPE={type(channel)}")
+        if bot.voice_clients:
+            print("DEBUG UDAH CONNECT, SKIP")
+            return
+        await channel.connect(self_deaf=True, self_mute=True)
+        print("DEBUG BERHASIL CONNECT!")
+    except Exception as e:
+        print(f"DEBUG JOIN ERROR: {e}")
+        
+@tasks.loop(seconds=60)
+async def keep_voice_alive():
+    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
+        await join_voice()
+
 @bot.event
 async def on_ready():
-    print(f"LOGGED IN AS {bot.user}", flush=True)
+    print(f"LOGGED IN AS {bot.user}")
     try: await bot.tree.sync()
-    except Exception as e: print(e, flush=True)
-    print("VOICE DIMATIIN - RAILWAY GA SUPPORT UDP, BIAR GA SPAM 4006", flush=True)
+    except Exception as e: print(e)
+    await join_voice()
+    if not keep_voice_alive.is_running(): keep_voice_alive.start()
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # Kalo Pegasus ke-kick dari voice, masuk lagi
+    if member.id == bot.user.id and before.channel and not after.channel:
+        await asyncio.sleep(2); await join_voice()
 
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
@@ -215,7 +248,7 @@ async def script_cmd(interaction: discord.Interaction, name: str):
         embed = build_embed(results, 0, name)
         await interaction.followup.send(embed=embed, view=view)
     except Exception as e:
-        print(f"SCRIPT CMD ERR: {e}", flush=True)
+        print(f"SCRIPT CMD ERR: {e}")
         await interaction.followup.send("ScriptBlox lagi down / kena limit, tunggu 30 detik terus coba lagi!")
 
 @bot.event
