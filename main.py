@@ -4,11 +4,9 @@ import os
 import json
 import urllib.request
 import urllib.parse
-import urllib.error
 import asyncio
 import io
 import datetime
-import time
 
 OWNER_ID = 1437432905734291618
 VOICE_CHANNEL_ID = 1570742871374569562
@@ -21,9 +19,9 @@ PRESET_MESSAGES = {
     "update_opah": "@everyone\n **MALAM SAMA OPAH SCRIPT UPDATE**\nNew version is now live!\nGet it now!",
     "maintenance_2": "@everyone\n```UNIVERSAL SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
     "maintenance_3": "@everyone\n```MALAM SAMA OPAH SCRIPT HAS MAINTENANCE, SCRIPT IN MODE MAINTENANCE OR UPDATING. PLEASE WAIT IN UNTIL TOMORROW```",
-    "changelog_VD": "@everyone\n **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
-    "changelog_universal": "@everyone\n **CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: New UI\n❌ Removed: Old Fly\n🔧 Fixed: Crash on load",
-    "changelog_opah": "@everyone\n **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
+    "changelog_VD": "@everyone\n📝 **CHANGELOG - VIOLENCE DISTRICT**\n✅ Added: Auto Farm, ESP\n❌ Removed: Old Aimbot\n🔧 Fixed: Bug teleport",
+    "changelog_universal": "@everyone\n📝 ```CHANGELOG - UNIVERSAL SCRIPT**\n✅ Added: list players on server\n❌ Removed: Old Fly and speed jump\n🔧 Fixed: Crash on load and slider```",
+    "changelog_opah": "@everyone\n📝 **CHANGELOG - MALAM SAMA OPAH**\n✅ Added: Auto Collect\n❌ Removed: - \n🔧 Fixed: Lag fix",
 }
 
 HELP_MESSAGE = """**PEGASUS - HOW TO USE**
@@ -40,24 +38,44 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# --- VOICE: FIX 4006 / 522 - PUTUSIN DULU BARU JOIN ---
 async def join_voice():
     print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
     try:
         if VOICE_CHANNEL_ID == 0: return
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        if bot.voice_clients:
-            print("DEBUG UDAH CONNECT, SKIP", flush=True)
+        # Kalo ada voice client lama yang nyangkut / udah putus, putusin paksa dulu
+        for vc in list(bot.voice_clients):
+            try:
+                if not vc.is_connected():
+                    await vc.disconnect(force=True)
+                    print("DEBUG PUTUSIN VOICE LAMA YANG NYANGKUT", flush=True)
+            except: pass
+        if bot.voice_clients and bot.voice_clients[0].is_connected():
+            print("DEBUG UDAH CONNECT BENERAN, SKIP", flush=True)
             return
-        await channel.connect(self_deaf=True, self_mute=True)
+        # Kalo masih ada sisa, putusin semua biar bersih
+        for vc in list(bot.voice_clients):
+            try: await vc.disconnect(force=True)
+            except: pass
+        await channel.connect(self_deaf=True, self_mute=True, timeout=20)
         print("DEBUG BERHASIL CONNECT!", flush=True)
-    except Exception as e: print(f"DEBUG JOIN ERROR: {e}", flush=True)
+    except Exception as e:
+        print(f"DEBUG JOIN ERROR: {e}", flush=True)
+        # Bersihin sisa biar next loop bisa coba lagi
+        for vc in list(bot.voice_clients):
+            try: await vc.disconnect(force=True)
+            except: pass
 
 @tasks.loop(seconds=30)
 async def keep_voice_alive():
-    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
-        print("DEBUG VOICE KOSONG, COBA JOIN LAGI...", flush=True)
-        await join_voice()
+    if VOICE_CHANNEL_ID != 0:
+        # Cek beneran connected atau cuma nyangkut
+        connected = any(vc.is_connected() for vc in bot.voice_clients)
+        if not connected:
+            print("DEBUG VOICE PUTUS / KOSONG, JOIN LAGI...", flush=True)
+            await join_voice()
 
 @bot.event
 async def on_ready():
@@ -76,6 +94,27 @@ async def on_voice_state_update(member, before, after):
 @bot.tree.command(name="help", description="How to use Pegasus")
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
+
+# --- HELPER: GAMBAR DARI ROBLOX ---
+def get_roblox_icon(game_dict):
+    # ScriptBlox kadang nyimpen gameId / placeId / universeId
+    # Kita coba ambil icon Roblox-nya dari situ
+    if not isinstance(game_dict, dict): return ""
+    gid = game_dict.get("gameId") or game_dict.get("placeId") or game_dict.get("universeId") or game_dict.get("id")
+    if not gid: return ""
+    try:
+        # Roblox Thumbnail API: universeId -> icon
+        # Kalo yang dikasih placeId, Roblox biasanya tetep bisa, kita coba langsung
+        url = f"https://thumbnails.roblox.com/v1/games/icons?universeIds={gid}&size=512x512&format=Png&isCircular=false"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode())
+            items = d.get("data", [])
+            if items and items[0].get("imageUrl"):
+                return items[0]["imageUrl"]
+    except Exception as e:
+        print(f"ROBLOX ICON ERR {e}", flush=True)
+    return ""
 
 def format_num(n):
     try:
@@ -107,8 +146,21 @@ def get_game_name(s):
     return str(g) if g else "Universal"
 def get_game_image(s):
     g = s.get("game") or {}
-    if isinstance(g, dict): return g.get("imageUrl") or g.get("image") or ""
-    return ""
+    # 1. Coba image dari ScriptBlox dulu
+    if isinstance(g, dict):
+        for k in ["imageUrl", "image", "icon", "thumbnail"]:
+            v = g.get(k)
+            if v and isinstance(v, str) and v.startswith("http"):
+                return v
+            if v and isinstance(v, str) and v.startswith("/"):
+                return "https://scriptblox.com" + v
+    # 2. Coba image dari script-nya
+    for k in ["image", "imageUrl", "thumbnail"]:
+        v = s.get(k)
+        if v and isinstance(v, str) and v.startswith("http"): return v
+        if v and isinstance(v, str) and v.startswith("/"): return "https://scriptblox.com" + v
+    # 3. Kalo ga ada, ambil dari Roblox
+    return get_roblox_icon(g)
 
 def extract_scripts(data):
     if isinstance(data, str):
@@ -122,15 +174,10 @@ def extract_scripts(data):
     return []
 
 def fetch_json(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://scriptblox.com/",
-    }
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json", "Referer": "https://scriptblox.com/"}
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=20) as resp:
-        raw = resp.read().decode(errors="ignore")
-        return json.loads(raw)
+        return json.loads(resp.read().decode(errors="ignore"))
 
 def search_scriptblox(query_text):
     q = query_text.strip()
@@ -143,15 +190,11 @@ def search_scriptblox(query_text):
     for qq in queries:
         enc = urllib.parse.quote(qq)
         target = f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1"
-        # Langsung dulu, ternyata ini yang tembus di Logs lu
         for url in [target, f"https://api.allorigins.win/raw?url={urllib.parse.quote(target)}"]:
             try:
-                print(f"TRY FETCH {url[:70]} query={qq}", flush=True)
                 data = fetch_json(url)
                 scripts = extract_scripts(data)
-                if scripts:
-                    print(f"SCRIPTBLOX OK query={qq} found={len(scripts)}", flush=True)
-                    return scripts
+                if scripts: return scripts
             except Exception as e:
                 print(f"SCRIPTBLOX ERR {e}", flush=True)
                 continue
@@ -160,22 +203,26 @@ def search_scriptblox(query_text):
 def build_embed(scripts, idx, query):
     s = scripts[idx]
     title = s.get("title") or "No Title"
+    # Kasih prefix [KEYLESS] / [KEY] kayak REXX, biar keliatan pro
+    prefix = "[KEYLESS]" if not s.get("key") else "[KEY]"
+    if not title.startswith("["):
+        title = f"{prefix} {title}"
     game = get_game_name(s)
     views = format_num(s.get("views") or s.get("viewCount") or 0)
     likes = format_num(s.get("likeCount") or s.get("likes") or 0)
     verified = "Verified" if s.get("verified") else "Not Verified"
-    key = "Key" if s.get("key") else "Keyless"
-    universal = "Universal" if s.get("isUniversal") or game.lower() == "universal" else game
+    key = "Keyless" if not s.get("key") else "Key"
     created = time_ago(s.get("createdAt") or s.get("created_at"))
-    updated = time_ago(s.get("updatedAt") or s.get("updated_at"))
     code = get_script_code(s).strip()
     if not code: code = "-- No script code in API, open Game List for link"
     display_code = code if len(code) <= 900 else code[:900] + "\n-- ... (pencet Copy Script buat full)"
     embed = discord.Embed(title=title, color=0x2b2d31)
-    embed.description = f"👁 {views}  |  👍 {likes}  |  ✅ {verified}  |  🔑 {key}  |  🌐 {universal}  |  📅 {created}  |  🔄 {updated}\n\n```lua\n{display_code}\n```"
+    # TANPA EMOJI, BERSIH KAYAK REXX
+    embed.description = f"{views} Views  |  {likes} Likes  |  {verified}  |  {key}  |  {game}  |  {created}\n\n```lua\n{display_code}\n```"
     embed.set_footer(text=f"Page 1/1 | Script {idx+1}/{len(scripts)}  •  Search: {query}")
-    img = s.get("image") or s.get("imageUrl") or get_game_image(s)
-    if img and isinstance(img, str) and img.startswith("http"): embed.set_image(url=img)
+    img = get_game_image(s)
+    if img:
+        embed.set_image(url=img)
     return embed
 
 class ScriptView(discord.ui.View):
@@ -186,7 +233,8 @@ class ScriptView(discord.ui.View):
     async def update_msg(self, interaction):
         embed = build_embed(self.scripts, self.idx, self.query)
         await interaction.response.edit_message(embed=embed, view=self)
-    @discord.ui.button(label="Copy Script", style=discord.ButtonStyle.secondary, emoji="📋", row=0)
+    # TANPA EMOJI DI TOMBOL, BERSIH
+    @discord.ui.button(label="Copy Script", style=discord.ButtonStyle.secondary, row=0)
     async def copy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current(); code = get_script_code(s).strip()
         if not code:
@@ -196,27 +244,26 @@ class ScriptView(discord.ui.View):
             await interaction.response.send_message(content=f"**{s.get('title','Script')}** - full code di file bawah:", file=f, ephemeral=True)
         else:
             await interaction.response.send_message(content=f"```lua\n{code}\n```", ephemeral=True)
-    @discord.ui.button(label="Download Script", style=discord.ButtonStyle.secondary, emoji="⬇️", row=0)
+    @discord.ui.button(label="Download Script", style=discord.ButtonStyle.secondary, row=0)
     async def download_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current(); code = get_script_code(s).strip() or "-- no code"
         f = discord.File(io.BytesIO(code.encode()), filename=f"{s.get('slug','script')}.lua")
         await interaction.response.send_message(content=f"Download: **{s.get('title','Script')}**", file=f, ephemeral=True)
-    # FIX: emoji ≡ -> ⚙️, yang lama bikin Discord nolak 400 Invalid emoji
-    @discord.ui.button(label="Options", style=discord.ButtonStyle.secondary, emoji="⚙️", row=0)
+    @discord.ui.button(label="Options", style=discord.ButtonStyle.secondary, row=0)
     async def options_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current()
         desc = s.get("description") or s.get("features") or "No description."
         if len(desc) > 1500: desc = desc[:1500] + "..."
         await interaction.response.send_message(f"**{s.get('title','Script')}**\nGame: **{get_game_name(s)}**\nVerified: {s.get('verified')} | Key: {s.get('key')} | Universal: {s.get('isUniversal')}\nViews: {format_num(s.get('views') or 0)} | Likes: {format_num(s.get('likeCount') or 0)}\n\n{desc}", ephemeral=True)
-    @discord.ui.button(emoji="◀", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=1)
     async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.idx = (self.idx - 1) % len(self.scripts); await self.update_msg(interaction)
     @discord.ui.button(label="Page 1/1", style=discord.ButtonStyle.secondary, disabled=True, row=1)
     async def page_btn(self, interaction: discord.Interaction, button: discord.ui.Button): pass
-    @discord.ui.button(emoji="▶", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=1)
     async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.idx = (self.idx + 1) % len(self.scripts); await self.update_msg(interaction)
-    @discord.ui.button(label="Game List", style=discord.ButtonStyle.success, emoji="✅", row=2)
+    @discord.ui.button(label="Game List", style=discord.ButtonStyle.success, row=2)
     async def gamelist_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         s = self.current(); game = get_game_name(s); slug = s.get("slug") or ""
         link = f"https://scriptblox.com/script/{slug}" if slug else "https://scriptblox.com"
@@ -229,7 +276,7 @@ async def script_cmd(interaction: discord.Interaction, name: str):
         results = await asyncio.to_thread(search_scriptblox, name)
         results = results[:10]
         if not results:
-            await interaction.followup.send(f"No scripts found for **{name}**. Coba ketik nama lain, contoh: `/script blox fruit` / `/script blade ball`")
+            await interaction.followup.send(f"No scripts found for **{name}**.")
             return
         view = ScriptView(results, name, interaction.user.id)
         embed = build_embed(results, 0, name)
