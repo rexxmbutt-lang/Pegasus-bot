@@ -40,30 +40,44 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# --- VOICE: VERSI LAMA YANG NYANGKUT, BALIK LAGI ---
 async def join_voice():
+    print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}", flush=True)
     try:
-        if VOICE_CHANNEL_ID == 0: return
+        if VOICE_CHANNEL_ID == 0:
+            print("DEBUG ID MASIH 0!", flush=True)
+            return
         channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel: channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        if bot.voice_clients: return
+        if not channel:
+            print("DEBUG CHANNEL NONE, COBA FETCH...", flush=True)
+            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+        print(f"DEBUG CHANNEL={channel}", flush=True)
+        if bot.voice_clients:
+            print("DEBUG UDAH CONNECT, SKIP", flush=True)
+            return
         await channel.connect(self_deaf=True, self_mute=True)
-    except Exception as e: print(f"DEBUG JOIN ERROR: {e}")
+        print("DEBUG BERHASIL CONNECT!", flush=True)
+    except Exception as e:
+        print(f"DEBUG JOIN ERROR: {e}", flush=True)
 
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=30)
 async def keep_voice_alive():
-    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients: await join_voice()
+    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
+        print("DEBUG VOICE KOSONG, COBA JOIN LAGI...", flush=True)
+        await join_voice()
 
 @bot.event
 async def on_ready():
-    print(f"LOGGED IN AS {bot.user}")
+    print(f"LOGGED IN AS {bot.user}", flush=True)
     try: await bot.tree.sync()
-    except Exception as e: print(e)
+    except Exception as e: print(e, flush=True)
     await join_voice()
     if not keep_voice_alive.is_running(): keep_voice_alive.start()
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel and not after.channel:
+        print("DEBUG PEGASUS KE-KICK, JOIN LAGI...", flush=True)
         await asyncio.sleep(2); await join_voice()
 
 @bot.tree.command(name="help", description="How to use Pegasus")
@@ -71,7 +85,7 @@ async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(HELP_MESSAGE)
 
 # ======================================================
-# === /SCRIPT - MODEL C PURE + VIA PROXY (ANTI-BLOCK) ===
+# === /SCRIPT - MODEL C PURE + 3 LAPIS PROXY ===
 # ======================================================
 
 def format_num(n):
@@ -108,12 +122,14 @@ def get_game_image(s):
     return ""
 
 def extract_scripts(data):
+    if isinstance(data, str):
+        try: data = json.loads(data)
+        except: return []
     if not isinstance(data, dict): return []
     r = data.get("result")
     if isinstance(r, dict) and isinstance(r.get("scripts"), list): return r["scripts"]
     if isinstance(r, list): return r
     if isinstance(data.get("scripts"), list): return data["scripts"]
-    if isinstance(data.get("result"), list): return data["result"]
     return []
 
 def fetch_json(url):
@@ -123,8 +139,11 @@ def fetch_json(url):
         "Referer": "https://scriptblox.com/",
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=25) as resp:
         raw = resp.read().decode(errors="ignore")
+        # Jina kadang nambahin teks depan, cari { pertama
+        if raw.strip().startswith("{") == False and "{" in raw:
+            raw = raw[raw.find("{"):]
         return json.loads(raw)
 
 def search_scriptblox(query_text):
@@ -139,32 +158,27 @@ def search_scriptblox(query_text):
     for qq in queries:
         enc = urllib.parse.quote(qq)
         target = f"https://scriptblox.com/api/script/search?q={enc}&mode=free&page=1"
-        # 1. Coba lewat proxy dulu - ini yang nembus Cloudflare
-        proxy_urls = [
+        # Lapis 1: Jina - paling bandel nembus Cloudflare
+        # Lapis 2: AllOrigins
+        # Lapis 3: Langsung
+        tries = [
+            f"https://cc.bingj.com/cache.cgi?d=1&w=1&u={urllib.parse.quote(target)}",
+            f"https://r.jina.ai/{target}",
             f"https://api.allorigins.win/raw?url={urllib.parse.quote(target)}",
-            f"https://api.codetabs.com/v1/proxy?quest={urllib.parse.quote(target)}",
+            target,
         ]
-        for url in proxy_urls:
+        for url in tries:
             try:
+                print(f"TRY FETCH {url[:70]} query={qq}", flush=True)
                 data = fetch_json(url)
                 scripts = extract_scripts(data)
                 if scripts:
-                    print(f"SCRIPTBLOX OK via proxy query={qq} found={len(scripts)}")
+                    print(f"SCRIPTBLOX OK query={qq} found={len(scripts)} via {url[:40]}", flush=True)
                     return scripts
-                print(f"SCRIPTBLOX EMPTY via proxy query={qq}")
+                print(f"SCRIPTBLOX EMPTY query={qq} via {url[:40]}", flush=True)
             except Exception as e:
-                print(f"SCRIPTBLOX PROXY ERR {e} query={qq} url={url[:60]}")
+                print(f"SCRIPTBLOX ERR {e} via {url[:50]}", flush=True)
                 continue
-        # 2. Kalo proxy gagal, coba langsung (siapa tau IP-nya lagi ga di-block)
-        try:
-            data = fetch_json(target)
-            scripts = extract_scripts(data)
-            if scripts:
-                print(f"SCRIPTBLOX OK direct query={qq} found={len(scripts)}")
-                return scripts
-        except Exception as e:
-            print(f"SCRIPTBLOX DIRECT ERR {e} query={qq}")
-            continue
     return []
 
 def build_embed(scripts, idx, query):
@@ -244,7 +258,7 @@ async def script_cmd(interaction: discord.Interaction, name: str):
         embed = build_embed(results, 0, name)
         await interaction.followup.send(embed=embed, view=view)
     except Exception as e:
-        print(f"SCRIPT CMD ERR: {e}")
+        print(f"SCRIPT CMD ERR: {e}", flush=True)
         await interaction.followup.send("ScriptBlox lagi down / kena limit, tunggu 30 detik terus coba lagi!")
 
 @bot.event
