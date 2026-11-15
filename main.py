@@ -63,16 +63,15 @@ async def join_voice():
         try:
             if VOICE_CHANNEL_ID == 0:
                 return
-                if bot.voice_clients:
-                    vc = bot.voice_clients[0]
-                    if vc.is_connected():
-                       print("DEBUG UDAH CONNECT, SKIP")
-                       return
-                       await vc.disconnect(force=True)
-                
-            channel = bot.get_channel(VOICE_CHANNEL_ID)
-            if not channel:
-                channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+                     if bot.voice_clients:
+            vc = bot.voice_clients[0]
+            if vc.is_connected():
+                print("DEBUG UDAH CONNECT, SKIP")
+                return
+          channel = bot.get_channel(VOICE_CHANNEL_ID)
+ 
+  if not channel:
+     channel = await bot.fetch_channel(VOICE_CHANNEL_ID) 
             await channel.connect(self_deaf=True, self_mute=True)
             print("DEBUG BERHASIL CONNECT!")
         except Exception as e:
