@@ -60,37 +60,30 @@ async def join_voice():
     async with _voice_lock:
         if VOICE_CHANNEL_ID == 0:
             return
-        if bot.voice_clients:
-            vc = bot.voice_clients[0]
-            if vc.is_connected():
-                return
-            else:
+        # force kill semua voice client dulu
+        for vc in bot.voice_clients:
+            try:
                 await vc.disconnect(force=True)
+            except:
+                pass
+        await asyncio.sleep(1)
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if not channel:
             channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
         await channel.connect(self_deaf=True, self_mute=True)
 
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=30)
 async def keep_voice_alive():
-    if VOICE_CHANNEL_ID != 0 and not bot.voice_clients:
+    if VOICE_CHANNEL_ID == 0:
+        return
+    vc = next((v for v in bot.voice_clients), None)
+    if not vc or not vc.is_connected():
         await join_voice()
-
-@bot.event
-async def on_ready():
-    print(f"LOGGED IN AS {bot.user}")
-    try:
-        await bot.tree.sync()
-    except Exception as e:
-        print(e)
-    await join_voice()
-    if not keep_voice_alive.is_running():
-        keep_voice_alive.start()
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel and not after.channel:
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         await join_voice()
 
 # ======================================================
