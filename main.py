@@ -83,7 +83,7 @@ async def join_voice():
     finally:
         _reconnecting = False
 
-@tasks.loop(seconds=20)
+@tasks.loop(seconds=60)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID == 0:
         return
@@ -97,12 +97,7 @@ async def before_keep_voice():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member.id != bot.user.id:
-        return
-    # bot ke-disconnect dari voice
-    if before.channel and not after.channel:
-        await asyncio.sleep(2)
-        await join_voice()
+    return
 
 @bot.event
 async def on_ready():
