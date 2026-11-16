@@ -108,6 +108,7 @@ async def on_ready():
         print(e)
     if not keep_voice_alive.is_running():
         keep_voice_alive.start()
+    await asyncio.sleep (5) 
     await join_voice()
 
 # ======================================================
