@@ -60,7 +60,6 @@ _voice_lock = asyncio.Lock()
 async def join_voice():
     async with _voice_lock:
         print(f"DEBUG JOIN ID={VOICE_CHANNEL_ID}")
-        try:
         if VOICE_CHANNEL_ID == 0: return
         if bot.voice_clients:
             vc = bot.voice_clients[0]
@@ -71,8 +70,6 @@ async def join_voice():
                 channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
                 await channel.connect(self_deaf=True, self_mute=True)
                 print("DEBUG BERHASIL CONNECT!")
-        except Exception as e:
-            print(f"DEBUG JOIN ERROR: {e}")
         
 @tasks.loop(seconds=60)
 async def keep_voice_alive():
