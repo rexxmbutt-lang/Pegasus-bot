@@ -395,15 +395,9 @@ async def script_cmd(interaction: discord.Interaction, name: str):
 async def on_message(message):
     await bot.process_commands(message)
 
-if message.guild is not None:
-    return
-
-    if message.guild is not None:
-        return
-    if message.author.id != OWNER_ID:
-        return
-    if message.author.bot:
-        return
+    if message.guild is not None: return 
+    if message.author.id != OWNER_ID: return 
+    if message.author.bot: return 
 
     content = message.content.strip()
 
