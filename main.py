@@ -83,7 +83,7 @@ async def join_voice():
     finally:
         _reconnecting = False
 
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=10)
 async def keep_voice_alive():
     if VOICE_CHANNEL_ID == 0:
         return
@@ -97,7 +97,8 @@ async def before_keep_voice():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    return
+    if member.id == bot.user.id and after.channel is None:
+        await join_voice()
 
 @bot.event
 async def on_ready():
