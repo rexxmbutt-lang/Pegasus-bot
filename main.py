@@ -79,7 +79,7 @@ async def join_voice():
                     channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
                 except:
                     return
-            await channel.connect(self_deaf=True, self_mute=True, timeout=10)
+            await channel.connect(timeout=10, self_mute=True, self_deaf=True, reconnect=False)
     finally:
         _reconnecting = False
 
