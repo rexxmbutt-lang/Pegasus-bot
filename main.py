@@ -395,8 +395,8 @@ async def script_cmd(interaction: discord.Interaction, name: str):
 async def on_message(message):
     await bot.process_commands(message)
 
-    if await _rx_gate(message):
-        return
+if message.guild is not None:
+    return
 
     if message.guild is not None:
         return
